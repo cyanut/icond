@@ -24,6 +24,7 @@ void asrt(int b, char *errmsg){
 }
 
 
+
 CARD32 *pixbuf2card32(GdkPixbuf *pix){
     int imgw, imgh, n_channels, i, j;
     GError *imgfileerr;
@@ -86,37 +87,58 @@ int main(int argc, char **argv){
     }
 
     exit(1);*/
-    XSelectInput(dpy, DefaultRootWindow(dpy), SubstructureNotifyMask);
+
+    Atom *proplist;
+    Atom iconatom;
+    int n_prop = 0;
+    i = 0;
+    Window rootwin = DefaultRootWindow(dpy);
+        Atom nameatom = XInternAtom(dpy, "_NET_WM_ICON_NAME", True);
+    XSelectInput(dpy, rootwin, SubstructureNotifyMask);
     for (;;){
         XNextEvent(dpy, &e);
-        if (e.type != CreateNotify) continue;
-        wid = e.xcreatewindow.window;
+        //printf("window %x got #%d event\n", e.xany.window, e.type);
+        if (e.type == CreateNotify){
+
+        printf("\n----------------\n");
+        printf("create win %x, parent = %x\n", e.xcreatewindow.window, e.xcreatewindow.parent);
+        printf("size = %d x %d\n", e.xcreatewindow.width, e.xcreatewindow.height);
+        }
+        if (e.type != ReparentNotify) continue;
+            printf("window %x reparents from %x to %x\n", e.xreparent.window, e.xreparent.event, e.xreparent.parent);
+        if (e.xreparent.parent == rootwin) continue;
+        wid = e.xreparent.window;
+        proplist = XListProperties(dpy, wid, &n_prop);
+        printf("here @ %x with %d properties\n", wid, n_prop);
+        if (n_prop == 0)
+            continue;
+
+        //for (i=0; i<n_prop && proplist[i] != iconatom; i++) printf("%d vs %d\n", proplist[i], iconatom);
         int status = XGetWindowProperty(
                 dpy, wid, XInternAtom(dpy, "_NET_WM_ICON_NAME", True),
                 0, (~0L), False, AnyPropertyType,
                 &actual_type, &actual_format, &nitems, &bytes, &name);
         if (name == NULL) continue;
         printf("icon name = %s\n", name);
-        printf("at %d,%d of %d*%d: parent=0x%x, window=0x%x\n", 
-                e.xcreatewindow.x, 
-                e.xcreatewindow.y, 
-                e.xcreatewindow.width, 
-                e.xcreatewindow.height, 
-                (int) e.xcreatewindow.parent, 
-                (int) wid);
+        /*
+           printf("at %d,%d of %d*%d: parent=0x%x, window=0x%x\n", 
+           e.xcreatewindow.x, 
+           e.xcreatewindow.y, 
+           e.xcreatewindow.width, 
+           e.xcreatewindow.height, 
+           (int) e.xcreatewindow.parent, 
+           (int) wid);
         //XFree(name); 
-
-        Atom *proplist;
-        Atom iconatom;
-        int n_prop = 0;
+        */
+        n_prop = 0;
         i = 0;
         iconatom = XInternAtom(dpy, "_NET_WM_ICON", False);
-        while (i >= n_prop){
+        //while (i >= n_prop){
             proplist = XListProperties(dpy, wid, &n_prop);
             for (i=0; i<n_prop && proplist[i] != iconatom; i++);
             //XFree(proplist);
-            usleep(100);
-        }
+            //usleep(100);
+        //}
         if (i == n_prop) {
             printf("this window has no icon\n");
             //continue;
@@ -134,7 +156,7 @@ int main(int argc, char **argv){
                 dpy, wid, XInternAtom(dpy, "_NET_WM_ICON_NAME", True),
                 0, (~0L), False, AnyPropertyType,
                 &actual_type, &actual_format, &nitems, &bytes, &name);
-        printf("icon - name 2: %s\n", name);
+        printf("icon - name 2: %s, status = %d\n", name, status);
 
         int success = XChangeProperty(
                 dpy,

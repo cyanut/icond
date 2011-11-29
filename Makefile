@@ -3,6 +3,10 @@
 
 EX_CFLAGS=$(shell pkg-config --cflags gtk+-2.0 gdk-pixbuf-2.0 librsvg-2.0)
 EX_LIBS=$(shell pkg-config --libs gtk+-2.0 gdk-pixbuf-2.0 librsvg-2.0)
+
+WNCK_LIBS_CFLAGS=$(shell pkg-config --cflags --libs libwnck-1.0 gtk+-2.0)
+
+
 XLIB_CFLAGS=-I /usr/X11R6/include
 
 XLIB_LIBS=-L /usr/X11R6/lib -lX11 -lXmu
@@ -28,6 +32,10 @@ xicond.o: xicond.c
 
 xicond: xicond.o
 	gcc ${LIBS} $^ -o $@
+
+
+wnck: xicond-wnck.c
+	gcc -g -Wall -pedantic ${WNCK_LIBS_CFLAGS} $^ -o $@
 
 .PHONY: clean
 clean:
