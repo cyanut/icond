@@ -1,13 +1,13 @@
 
 #define WNCK_I_KNOW_THIS_IS_UNSTABLE
 #define ICON_SIZE 48
+
 #include <libwnck/libwnck.h>
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h>
-
+#include <string.h>
 typedef unsigned long int CARD32;
 
 Display *dpy;
@@ -30,7 +30,7 @@ void asrt(int b, char *errmsg){
 void lower(char *s){
     int i;
     for (i=0; i<strlen(s); i++)
-        s[i] = tolower(s[i]);
+        s[i] = (s[i] > 64 && s[i] < 91) ? s[i] : s[i] + 32;
 }
 
 CARD32 *pixbuf2card32(GdkPixbuf *pix){
@@ -41,10 +41,7 @@ CARD32 *pixbuf2card32(GdkPixbuf *pix){
     n_channels = gdk_pixbuf_get_n_channels(pix);
     asrt(gdk_pixbuf_get_colorspace(pix) == GDK_COLORSPACE_RGB,
             "image not in RGB!");
-    asrt((gdk_pixbuf_get_bits_per_sample(pix) == 8 &&
-                gdk_pixbuf_get_has_alpha(pix) &&
-                n_channels == 4),
-            "Not 32 bit RGBA image!");
+    asrt(gdk_pixbuf_get_bits_per_sample(pix), "Not 32 bit RGBA image!");
     imgw = gdk_pixbuf_get_width(pix);
     imgh = gdk_pixbuf_get_height(pix);
     printf("Pixbuf %d x %d\n", imgw, imgh);
@@ -55,17 +52,16 @@ CARD32 *pixbuf2card32(GdkPixbuf *pix){
     for (i=2; i < imgw * imgh + 2; i++){
         for (j=2; j>=0; j--)
             data[i] += (int)(*(pixels++)) << j*8; //RGB
-        data[i] += (int)(*(pixels++)) << 24; //A 
+        if (n_channels == 4)
+            data[i] += (int)(*(pixels++)) << 24; //A 
     }
-    g_object_unref(pix);
     return data;
 }
 
 
 void on_window_opened(WnckScreen *screen, WnckWindow *win){
-   // char *icon_name = wnck_window_get_icon_name(win);
     WnckApplication *app = wnck_window_get_application(win);
-    char *icon_name = wnck_application_get_icon_name(app);
+    char *icon_name = (char *) wnck_application_get_icon_name(app);
     Window wid = (Window) wnck_window_get_xid(win);
     CARD32 *iconcard32;
     GdkPixbuf *iconpix;
@@ -74,26 +70,34 @@ void on_window_opened(WnckScreen *screen, WnckWindow *win){
             ICON_SIZE, 0, &err);
     if (iconpix == NULL){
         lower(icon_name);
+        g_error_free(err);
+        err = NULL;
         iconpix = gtk_icon_theme_load_icon(gicontheme, icon_name,
                ICON_SIZE, 0, &err);
     }
-    if (iconpix == NULL) return; 
-    printf("icon %s at %p\n", icon_name, iconpix);
+    if (iconpix == NULL) {
+        g_error_free(err);
+        return;
+    } 
+    printf("icon %s at %p\n", icon_name, (void *)iconpix);
     iconcard32 = pixbuf2card32(iconpix);
+    Atom iconatom = XInternAtom(dpy, "_NET_WM_ICON", False); 
     int success = XChangeProperty(
             dpy,
             wid,
-            XInternAtom(dpy, "_NET_WM_ICON", False),
+            iconatom,
             XA_CARDINAL,
             32,
             PropModeReplace,
-            (gchar*)iconcard32,
+            (unsigned char *)iconcard32,
             48 * 48 + 2);
-    if (success != NULL){
+    if (success != 0){
         printf("image: %dx%d\n", (int)*(iconcard32), (int)*(iconcard32+1));
-        //g_free(iconcard32);
         XFlush(dpy);
     }
+    g_free(iconcard32);
+    g_object_unref(iconpix);
+    //g_free(icon_name);
 }    
 
 int main(int argc, char **argv){
